@@ -1,0 +1,103 @@
+# Importing the libraries
+import numpy as np
+import pandas as pd
+
+from tensorflow import keras
+from tensorflow.keras.layers import Conv2D, MaxPool2D, Dense, Dropout, Flatten
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+import warnings
+warnings.filterwarnings("ignore")
+
+from sklearn.metrics import confusion_matrix
+
+data = pd.read_csv("/content/hmnist_64_64_L.csv")
+data.head()
+if 'label' in data.columns:
+    Y = data["label"]
+    X = data.drop(["label"], axis=1)
+else:
+    print("Warning: 'label' column not found in the DataFrame. Check your data.")
+    X = data  # Assign the whole DataFrame to X if 'label' is missing
+    Y = None  # Set Y to None to indicate missing labels
+
+plt.figure(figsize=(15,7))
+g = sns.countplot(Y, palette="winter_r")
+plt.suptitle("Amount of each classes")
+plt.show()
+
+Y.value_counts()
+X = X / 255.0
+
+img = X.iloc[75].to_numpy() # Use to_numpy() to get NumPy array
+img = img.reshape(64,64)
+plt.imshow(img)
+plt.suptitle("An example of image on the dataset")
+plt.show()
+
+X = X.values.reshape(-1,64,64,1)       # shaping for the Keras
+Y = Y.values
+
+# Label Encoding
+from keras.utils import to_categorical # import directly from keras.utils
+Y = to_categorical(Y)
+
+from sklearn.model_selection import train_test_split
+x_train, x_val, y_train, y_val = train_test_split(X, Y, test_size = 0.2, random_state=42)
+
+print("x_train.shape: ",x_train.shape)
+print("x_val.shape: ",x_val.shape)
+print("y_train.shape: ",y_train.shape)
+print("y_val.shape: ",y_val.shape)
+
+model = Sequential()
+
+model.add(Conv2D(filters = 128, kernel_size = (5,5),padding = 'same',activation ='relu', input_shape = (64,64,1)))
+model.add(MaxPool2D(pool_size=(2,2)))
+model.add(Dropout(0.25))
+
+model.add(Conv2D(filters = 64, kernel_size = (3,3),padding = 'same',activation ='relu'))
+model.add(MaxPool2D(pool_size=(2,2)))
+model.add(Dropout(0.25))
+
+model.add(Conv2D(filters = 64, kernel_size = (3,3),padding = 'same',activation ='relu'))
+model.add(MaxPool2D(pool_size=(2,2)))
+model.add(Dropout(0.25))
+
+model.add(Flatten())
+
+model.add(Dense(256,activation = "relu"))
+model.add(Dense(64,activation = "relu"))
+model.add(Dense(32,activation = "relu"))
+
+model.add(Dense(9, activation = "softmax"))
+
+model.summary()
+
+model.compile(optimizer = "Adam" , loss = "categorical_crossentropy", metrics=["accuracy"])
+
+datagen = ImageDataGenerator(rotation_range=0.5,zoom_range = 0.5,width_shift_range=0.5,height_shift_range=0.5,horizontal_flip=True,vertical_flip=True)
+
+datagen.fit(x_train)
+
+model.fit(datagen.flow(x_train,y_train, batch_size=200),
+          epochs = 20, validation_data = (x_val,y_val), steps_per_epoch=500)
+
+Y_pred = model.predict(x_val)
+# Convert predictions classes to one hot vectors
+Y_pred_classes = np.argmax(Y_pred,axis = 1)
+# Convert validation observations to one hot vectors
+Y_true = np.argmax(y_val,axis = 1)
+# compute the confusion matrix
+confusion_mtx = confusion_matrix(Y_true, Y_pred_classes)
+# plot the confusion matrix
+f,ax = plt.subplots(figsize=(18, 16))
+sns.heatmap(confusion_mtx, annot=True, linewidths=0.01,cmap="summer_r", fmt= '.1f',ax=ax)
+plt.xlabel("Predicted Label")
+plt.ylabel("True Label")
+plt.title("Confusion Matrix")
+plt.show()
